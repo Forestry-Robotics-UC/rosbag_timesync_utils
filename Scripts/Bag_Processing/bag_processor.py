@@ -12,6 +12,8 @@ bagfiles = []
 # Target topics subject to timestamp correction
 targets = [
     "/rslidar_packets",
+    "/ouster/points",
+    "/ouster/imu",
     "/imu/data",
     "/imu/mag",
     "/camera/camera/color/image_raw",
@@ -99,22 +101,75 @@ for file in bagfiles:
             if corrected_ts != 0:
                 message["corrected_ts"] = corrected_ts
 
+    # Process Ouster points for timestamp correction
+    if "/ouster/points" in messages:
+        for message in messages["/ouster/points"]:
+            decoded = deserialize_message(
+                message["message"], 
+                get_message("sensor_msgs/msg/PointCloud2")
+            )
+
+            # Corrects timestamp based on delta from reference (manual for now, automatic later on)
+            header_ts = int(decoded.header.stamp.sec * 1e9 + decoded.header.stamp.nanosec)
+            delta = header_ts - ouster_data['internal']
+
+            corrected_ts = ouster_data['epoch'] + delta
+
+            # Applies corrected timestamp on the header as well
+            decoded.header.stamp.sec = corrected_ts // int(1e9)
+            decoded.header.stamp.nanosec = corrected_ts % int(1e9)
+            message["corrected_ts"] = corrected_ts
+
+            message["message"] = serialize_message(decoded)
+
+    # Process Ouster IMU data for timestamp correction
+    if "/ouster/imu" in messages:
+        for message in messages["/ouster/imu"]:
+            decoded = deserialize_message(
+                message["message"], 
+                get_message("sensor_msgs/msg/Imu")
+            )
+            
+            # Corrects timestamp based on delta from reference
+            header_ts = int(decoded.header.stamp.sec * 1e9 + decoded.header.stamp.nanosec)
+            delta = header_ts - ouster_data['internal']
+
+            corrected_ts = ouster_data['epoch'] + delta
+            
+            # Applies corrected timestamp on the header as well
+            decoded.header.stamp.sec = corrected_ts // int(1e9)
+            decoded.header.stamp.nanosec = corrected_ts % int(1e9)
+            message["corrected_ts"] = corrected_ts
+            
+            message["message"] = serialize_message(decoded)            
+
     # Process Realsense color images for timestamp correction
     if "/camera/camera/color/image_raw" in messages:
         for message, metadata in zip(
             messages["/camera/camera/color/image_raw"],
             messages["/camera/camera/color/metadata"]    
         ):
-            decoded = deserialize_message(
+            decoded_md = deserialize_message(
                 metadata["message"], 
                 get_message("realsense2_camera_msgs/msg/Metadata")
             )
-
-            json_data = json.loads(decoded.json_data)
             
+            decoded = deserialize_message(
+                message["message"], 
+                get_message("sensor_msgs/msg/Image")
+            )
+
+            json_data = json.loads(decoded_md.json_data)
+
             # Uses the frame timestamp parameter present in the metadata
             corrected_ts = int(json_data["frame_timestamp"] * 1e6)
+
+            # Applies corrected timestamp on the header as well
+            decoded.header.stamp.sec = corrected_ts // int(1e9)
+            decoded.header.stamp.nanosec = corrected_ts % int(1e9)
             message["corrected_ts"] = corrected_ts
+
+            message["message"] = serialize_message(decoded)
 
     # Process Realsense aligned depth images for timestamp correction
     if "/camera/camera/aligned_depth_to_color/image_raw" in messages:
@@ -122,16 +177,27 @@ for file in bagfiles:
             messages["/camera/camera/aligned_depth_to_color/image_raw"],
             messages["/camera/camera/depth/metadata"]    
         ):
-            decoded = deserialize_message(
+            decoded_md = deserialize_message(
                 metadata["message"], 
                 get_message("realsense2_camera_msgs/msg/Metadata")
             )
 
-            json_data = json.loads(decoded.json_data)
+            decoded = deserialize_message(
+                message["message"], 
+                get_message("sensor_msgs/msg/Image")
+            )
+
+            json_data = json.loads(decoded_md.json_data)
             
             # Uses the frame timestamp and actual exposure parameters present in the metadata
             corrected_ts = int(json_data["frame_timestamp"] * 1e6) - (json_data["actual_exposure"] * 1000) - 1000000
+
+            # Applies corrected timestamp on the header as well
+            decoded.header.stamp.sec = corrected_ts // int(1e9)
+            decoded.header.stamp.nanosec = corrected_ts % int(1e9)
             message["corrected_ts"] = corrected_ts
+
+            message["message"] = serialize_message(decoded)
 
     # Process IMU data for timestamp correction
     if "/imu/data" in messages:
