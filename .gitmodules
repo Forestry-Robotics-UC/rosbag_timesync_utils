@@ -1,0 +1,9 @@
+[submodule "Docker/ROS2_Jazzy/src/ouster-ros"]
+	path = Docker/ROS2_Jazzy/src/ouster-ros
+	url = https://github.com/ouster-lidar/ouster-ros/tree/ros2
+[submodule "Docker/ROS2_Jazzy/src/unitree_ros"]
+	path = Docker/ROS2_Jazzy/src/unitree_ros
+	url = https://github.com/snt-arg/unitree_ros
+[submodule "Docker/ROS2_Jazzy/src/rslidar_msg"]
+	path = Docker/ROS2_Jazzy/src/rslidar_msg
+	url = https://github.com/RoboSense-LiDAR/rslidar_msg

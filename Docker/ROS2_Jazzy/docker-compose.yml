@@ -1,0 +1,18 @@
+services:
+  ros2_docker:
+    stdin_open: true
+    tty: true
+    container_name: ros2_docker
+    privileged: true
+    network_mode: host
+    environment:
+      - DISPLAY=$DISPLAY
+    volumes:
+      - /dev/:/dev/
+      - /tmp/.docker.xauth:/tmp/.docker.xauth:rw
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./src:/root/ros2_ws/src
+      - ./bags:/root/ros2_ws/bags
+    image: ros2_docker:latest
+    command: bash
+    restart: unless-stopped
