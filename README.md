@@ -24,7 +24,7 @@ The pre-compiled custom firmware present in this repository outputs the followin
 - **IMU** - 1Hz (GPIO 6)
 - **CAMERA** - 30Hz (GPIO 10)
 
-![FRUC Timesync Board](Designs\FRUC_Timesync_Board\FRUC_Timesync_Board.jpg)
+![FRUC Timesync Board](Designs/FRUC_Timesync_Board/FRUC_Timesync_Board.jpg)
 
 #### How to flash the Raspberry Pico with custom firmware
 
@@ -41,7 +41,7 @@ For ease of use, the `.uf2` binary file is already provided in this repository r
 
 Replica of a UART to USB converter board with exposed copper pads at the end where an Xsens MTi 600-series compatible cable can be soldered ([CA-MP-12-OPEN](https://www.digikey.com/en/products/detail/xsens-a-movella-brand/CA-MP-12-OPEN/12702430)). Contains a standard JST-SH 4-pin connector for full control over the SYNC lines
 
-![Xsens USB Converter Replica](Designs\Xsens_USB_Converter_Replica\Xsens_USB_Converter_Replica.png)
+![Xsens USB Converter Replica](Designs/Xsens_USB_Converter_Replica/Xsens_USB_Converter_Replica.png)
 
 #### Soldering information and wire matching
 
@@ -62,7 +62,7 @@ Only 10 out of the 12 exposed wires from the aforementioned cable are soldered t
 
 The pinout order for the SYNC lines JST-SH connector can be seen in the image below
 
-![SYNC Lines](Designs\Xsens_USB_Converter_Replica\Xsens_USB_Converter_Replica_SYNC_Lines.png)
+![SYNC Lines](Designs/Xsens_USB_Converter_Replica/Xsens_USB_Converter_Replica_SYNC_Lines.png)
 
 ## Bag Post Processing Script
 
