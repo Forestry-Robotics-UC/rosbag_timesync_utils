@@ -1,6 +1,7 @@
 [submodule "Docker/ROS2_Jazzy/src/ouster-ros"]
 	path = Docker/ROS2_Jazzy/src/ouster-ros
-	url = https://github.com/ouster-lidar/ouster-ros/tree/ros2
+	url = https://github.com/ouster-lidar/ouster-ros
+	branch = ros2
 [submodule "Docker/ROS2_Jazzy/src/unitree_ros"]
 	path = Docker/ROS2_Jazzy/src/unitree_ros
 	url = https://github.com/snt-arg/unitree_ros
