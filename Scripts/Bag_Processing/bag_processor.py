@@ -60,7 +60,11 @@ for file in bagfiles:
             if topic.name in targets: output_topic = f"{topic.name}/corrected"
 
             # Create topic on output bag
+            # NOTE: id is a mandatory parameter when using this script in Jazzy, but it is not used
+            # when using this script in Humble, so make sure to comment it or uncomment depending on
+            # the ROS version used
             metadata = rosbag2_py.TopicMetadata(
+                id=topic.id,
                 name=output_topic,
                 type=topics[topic.name],
                 serialization_format="cdr"

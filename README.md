@@ -68,19 +68,19 @@ The pinout order for the SYNC lines JST-SH connector can be seen in the image be
 
 For accurate bag processing, the messages in the recorded bags needs to have both the header and record timestamp as close to the actual physical capture time as possible. This does not happen by default during capture, so all recorded bags need to be subject to a post processing to fix this
 
-To do so, a `Python/ROS2` script is used, located in `Scripts/Bag_Processing/`. As the script uses ROS2 packages and libraries, it needs to be run inside a ROS2 environment. A ready to use Dockerized version is present in `Docker/ROS2_Jazzy`, containing both a `.Dockerfile` to build the image, and a Compose `.yml` file to create and launch a container, create the folder bindings, etc.
+To do so, a `Python/ROS2` script is used, located in `Scripts/Bag_Processing/`. As the script uses ROS2 packages and libraries, it needs to be run inside a ROS2 environment. A ready to use Dockerized version of both ROS2 Humble and Jazzy distros are present in `Docker/ROS2`, containing both a `.Dockerfile` to build each image, and a Compose `.yml` file to create and launch a container for each distro, create the folder bindings, etc.
 
 If you do not have the Docker Engine installed, following the install guide [here](https://github.com/Forestry-Robotics-UC/docker_ros_tutorial)
 
 ### Building the image and launching the container
 
-Firstly, the image needs to be built using the provided Dockerfile. Change directory to inside the `Dockerfile` folder, and run the following command:
+Firstly, the image needs to be built using the provided Dockerfile. Change directory to inside the `Dockerfile` folder, and run the following command, replacing distro with either `humble` or `jazzy`:
 
 ```
-docker build -f ros2_jazzy.Dockerfile -t ros2_docker:latest .
+docker build -f ros2_{distro}.Dockerfile -t ros2_{distro}_docker:latest .
 ```
 
-Once finished, create and launch the container using Docker Compose. Change directory back to the root `ROS2_Jazzy` folder, and run the following command:
+Once finished, create and launch the container using Docker Compose. Change directory back to the root `ROS2` folder, and run the following command:
 
 ```
 docker compose up
@@ -89,7 +89,7 @@ docker compose up
 Once the container is up, to enter it, run the following command:
 
 ```
-docker exec -it ros2_docker bash
+docker exec -it ros2_{distro}_docker bash
 ```
 
 ### Building the sensor packages/libraries
@@ -124,6 +124,8 @@ ros2 bag reindex <relative_bag_path_file>
 ```
 
 This will generate a new `metadata.yaml` file, however, the relative file paths at the end of this file are out of order, so it is recommended for the user to manually re-order the entries in numerical order
+
+**NOTE: Depending on the distro used, the script may or not require topic ID to be used when creating the topic metadata. As such, when running the script in ROS2 Humble, make sure line 67 is commented, and uncommented in ROS2 Jazzy**
 
 ### Timestamp corrections routine per sensor
 
