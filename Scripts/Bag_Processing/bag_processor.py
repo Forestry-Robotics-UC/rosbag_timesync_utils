@@ -5,19 +5,15 @@ import json, os, shutil, sys
 
 # Receives bag path via sys.argv
 path_in = sys.argv[1]
-path_out = f"{path_in}_Corrected"
+path_out = f"{path_in}_Processed"
 
 bagfiles = []
 
 # Target topics subject to timestamp correction
 targets = [
-    "/rslidar_packets",
-    "/ouster/points",
-    "/ouster/imu",
     "/imu/data",
-    "/imu/mag",
     "/camera/camera/color/image_raw",
-    "/camera/camera/aligned_depth_to_color/image_raw"
+    "/camera/camera/aligned_depth_to_color/image_raw",
 ]
 
 # Sorts bag files numerically based on suffix
@@ -29,9 +25,10 @@ files = sorted(
 for file in files:
     bagfiles.append(os.path.join(path_in, file))
 
-# Process each bag file
-counter = 0
+# Process each bag file sequentially
 for file in bagfiles:
+    bag_number = file.split("_")[-1].replace(".mcap", "")
+
     messages = {}
     topics = {}
 
@@ -39,10 +36,10 @@ for file in bagfiles:
 
     # Create output bag writer
     writer = rosbag2_py.SequentialWriter()
-    storage_corrected = rosbag2_py.StorageOptions(uri=f"{path_out}_{counter}", storage_id="mcap")
+    storage_Processed = rosbag2_py.StorageOptions(uri=f"{path_out}_{bag_number}", storage_id="mcap")
     converter = rosbag2_py.ConverterOptions(input_serialization_format="cdr", output_serialization_format="cdr")
 
-    writer.open(storage_corrected, converter)
+    writer.open(storage_Processed, converter)
 
     # Create input bag reader
     reader = rosbag2_py.SequentialReader()
@@ -64,7 +61,7 @@ for file in bagfiles:
             # when using this script in Humble, so make sure to comment it or uncomment depending on
             # the ROS version used
             metadata = rosbag2_py.TopicMetadata(
-                id=topic.id,
+                # id=topic.id,
                 name=output_topic,
                 type=topics[topic.name],
                 serialization_format="cdr"
@@ -73,161 +70,82 @@ for file in bagfiles:
             writer.create_topic(metadata)
             print(f"Created topic on output bag: {output_topic}")
 
-        # Initialize message storage
-        if topic.name not in messages:
-            messages[topic.name] = []
 
     # Read messages from input bag
     while reader.has_next():
         topic, msg, timestamp = reader.read_next()
 
-        data = {
-            "message": msg,
-            "record_ts": timestamp,
-            "corrected_ts": None
-        }
+        # Decodes message as soon as read to extract header timestamp, which is the default publish
+        # timestamp for the processed bags
+        decoded = deserialize_message(
+            msg, 
+            get_message(topics[topic])
+        )
 
-        messages[topic].append(data)
+        header_ts = int(decoded.header.stamp.sec * 1e9 + decoded.header.stamp.nanosec) if hasattr(decoded, "header") else timestamp
+
+        # To correlate Realsense metadata messages with the corresponding image message, metadata for
+        # these topics is stored as a dictionary with the header timestamp as key, timestamp which is
+        # the same in the corresponding image header
+        if "/depth/metadata" in topic or "/color/metadata" in topic:
+            # Initialize message storage
+            if topic not in messages:
+                messages[topic] = {}
+
+            exp_time = 0
+            json_data = json.loads(decoded.json_data)
+
+            # The actual_exposure parameter may be missing so make sure to default exposure time to 0
+            if "actual_exposure" in json_data:
+                exp_time = json_data["actual_exposure"]
+            
+            messages[topic][header_ts] = {
+                "coded_msg": msg,
+                "exp_time": exp_time,
+                "header_ts": header_ts,
+                "corrected_ts": None
+            }
+        else:
+            # Initialize message storage
+            if topic not in messages:
+                messages[topic] = []
+
+            # Also saves decoded message for any potential future use
+            messages[topic].append(
+                {
+                    "coded_msg": msg,
+                    "decoded_msg": decoded,
+                    "header_ts": header_ts,
+                    "corrected_ts": None
+                }
+            )
 
     # List number of messages read per topic
     for topic in messages:
         print(f"Messages read from {topic}: {len(messages[topic])}")
-
-    # Process BPearl packets for timestamp correction
-    if "/rslidar_packets" in messages:
-        for message in messages["/rslidar_packets"]:
-            decoded = deserialize_message(
-                message["message"], 
-                get_message("rslidar_msg/msg/RslidarPacket")
-            )
-
-            corrected_ts = int(decoded.header.stamp.sec * 1e9 + decoded.header.stamp.nanosec)
-            if corrected_ts != 0:
-                message["corrected_ts"] = corrected_ts
-
-    # Process Ouster points for timestamp correction
-    if "/ouster/points" in messages:
-        for message in messages["/ouster/points"]:
-            decoded = deserialize_message(
-                message["message"], 
-                get_message("sensor_msgs/msg/PointCloud2")
-            )
-
-            # Corrects timestamp based on delta from reference (manual for now, automatic later on)
-            header_ts = int(decoded.header.stamp.sec * 1e9 + decoded.header.stamp.nanosec)
-            delta = header_ts - ouster_data['internal']
-
-            corrected_ts = ouster_data['epoch'] + delta
-
-            # Applies corrected timestamp on the header as well
-            decoded.header.stamp.sec = corrected_ts // int(1e9)
-            decoded.header.stamp.nanosec = corrected_ts % int(1e9)
-            message["corrected_ts"] = corrected_ts
-
-            message["message"] = serialize_message(decoded)
-
-    # Process Ouster IMU data for timestamp correction
-    if "/ouster/imu" in messages:
-        for message in messages["/ouster/imu"]:
-            decoded = deserialize_message(
-                message["message"], 
-                get_message("sensor_msgs/msg/Imu")
-            )
             
-            # Corrects timestamp based on delta from reference
-            header_ts = int(decoded.header.stamp.sec * 1e9 + decoded.header.stamp.nanosec)
-            delta = header_ts - ouster_data['internal']
-
-            corrected_ts = ouster_data['epoch'] + delta
-            
-            # Applies corrected timestamp on the header as well
-            decoded.header.stamp.sec = corrected_ts // int(1e9)
-            decoded.header.stamp.nanosec = corrected_ts % int(1e9)
-            message["corrected_ts"] = corrected_ts
-            
-            message["message"] = serialize_message(decoded)            
-
-    # Process Realsense color images for timestamp correction
+    # Process Realsense color images for timestamp correction using exposure time
     if "/camera/camera/color/image_raw" in messages:
-        for message, metadata in zip(
-            messages["/camera/camera/color/image_raw"],
-            messages["/camera/camera/color/metadata"]    
-        ):
-            decoded_md = deserialize_message(
-                metadata["message"], 
-                get_message("realsense2_camera_msgs/msg/Metadata")
-            )
+        for message in messages["/camera/camera/color/image_raw"]:        
+            # For Realsense, header timestamp is same as frame timestamp from corresponding metadata
+            exp_time = messages["/camera/camera/color/metadata"].get(message["header_ts"], {}).get("exp_time", 0)
             
-            decoded = deserialize_message(
-                message["message"], 
-                get_message("sensor_msgs/msg/Image")
-            )
+            message["corrected_ts"] = int(message["header_ts"] - (exp_time * 1e3))
 
-            json_data = json.loads(decoded_md.json_data)
-
-            # Uses the frame timestamp parameter present in the metadata
-            corrected_ts = int(json_data["frame_timestamp"] * 1e6)
-
-            # Applies corrected timestamp on the header as well
-            decoded.header.stamp.sec = corrected_ts // int(1e9)
-            decoded.header.stamp.nanosec = corrected_ts % int(1e9)
-            message["corrected_ts"] = corrected_ts
-
-            message["message"] = serialize_message(decoded)
-
-    # Process Realsense aligned depth images for timestamp correction
+    # Process Realsense aligned depth images for timestamp correction using exposure time
     if "/camera/camera/aligned_depth_to_color/image_raw" in messages:
-        for message, metadata in zip(
-            messages["/camera/camera/aligned_depth_to_color/image_raw"],
-            messages["/camera/camera/depth/metadata"]    
-        ):
-            decoded_md = deserialize_message(
-                metadata["message"], 
-                get_message("realsense2_camera_msgs/msg/Metadata")
-            )
-
-            decoded = deserialize_message(
-                message["message"], 
-                get_message("sensor_msgs/msg/Image")
-            )
-
-            json_data = json.loads(decoded_md.json_data)
+        for message in messages["/camera/camera/aligned_depth_to_color/image_raw"]:
+            # For Realsense, header timestamp is same as frame timestamp from corresponding metadata
+            exp_time = messages["/camera/camera/depth/metadata"].get(message["header_ts"], {}).get("exp_time", 0)
             
-            # Uses the frame timestamp and actual exposure parameters present in the metadata
-            corrected_ts = int(json_data["frame_timestamp"] * 1e6) - (json_data["actual_exposure"] * 1000) - 1000000
+            message["corrected_ts"] = int(message["header_ts"] - (exp_time * 1e3))
 
-            # Applies corrected timestamp on the header as well
-            decoded.header.stamp.sec = corrected_ts // int(1e9)
-            decoded.header.stamp.nanosec = corrected_ts % int(1e9)
-            message["corrected_ts"] = corrected_ts
-
-            message["message"] = serialize_message(decoded)
-
-    # Process IMU data for timestamp correction
+    # Process IMU data for frame id adjustment
     if "/imu/data" in messages:
         for message in messages["/imu/data"]:
-            decoded = deserialize_message(
-                message["message"], 
-                get_message("sensor_msgs/msg/Imu")
-            )
-
-            corrected_ts = int(decoded.header.stamp.sec * 1e9 + decoded.header.stamp.nanosec)
-            message["corrected_ts"] = corrected_ts
-
             # Adjust frame_id
-            decoded.header.frame_id = "xsens_imu"
-            message["message"] = serialize_message(decoded)
-
-    # Process IMU magnetometer data for timestamp correction
-    if "/imu/mag" in messages:
-        for message in messages["/imu/mag"]:
-            decoded = deserialize_message(
-                message["message"], 
-                get_message("sensor_msgs/msg/MagneticField")
-            )
-
-            corrected_ts = int(decoded.header.stamp.sec * 1e9 + decoded.header.stamp.nanosec)
-            message["corrected_ts"] = corrected_ts
+            message["decoded_msg"].header.frame_id = "xsens_imu"
+            message["coded_msg"] = serialize_message(message["decoded_msg"])
 
     # Write messages to output bag with corrected timestamps
     for topic in messages:
@@ -236,20 +154,25 @@ for file in bagfiles:
         print(f"Writing messages to {output_topic} on output bag")
 
         for message in messages[topic]:
-            corrected_ts = message["corrected_ts"]        
-            output_ts = corrected_ts if corrected_ts is not None else message["record_ts"]
+            if "/depth/metadata" in topic or "/color/metadata" in topic: message = messages[topic][message]
 
-            writer.write(output_topic, message["message"], int(output_ts))
+            header_ts = message["header_ts"]
+            corrected_ts = message["corrected_ts"]
+
+            # Defaults publish timestamp to the extracted header timestamp unless a
+            # corrected timestamp exists
+            output_ts = header_ts if corrected_ts is None else corrected_ts
+
+            writer.write(output_topic, message["coded_msg"], int(output_ts))
 
     # Close reader and writer
     del reader, writer
-    counter += 1
 
 corrected_folder = f"{path_out}_0"
 
 for folder in os.listdir(path_in.split("/")[0]):
     # Move all processed bags into one single folder
-    if "_Corrected" in folder and "_Corrected_0" not in folder:
+    if "_Processed" in folder and "_Processed_0" not in folder:
         folder_path = os.path.join(path_in.split("/")[0], folder)
 
         print(f"Moving files from {folder_path} to {corrected_folder}")
