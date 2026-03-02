@@ -1,6 +1,6 @@
 [submodule "Docker/ROS2/src/ouster-ros"]
 	path = Docker/ROS2/src/ouster-ros
-	url = https://github.com/ouster-lidar/ouster-ros
+	url = https://github.com/errorcodecritical/ouster-ros
 	branch = ros2
 [submodule "Docker/ROS2/src/unitree_ros"]
 	path = Docker/ROS2/src/unitree_ros
