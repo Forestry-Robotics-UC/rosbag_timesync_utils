@@ -9,8 +9,15 @@ path_out = f"{path_in}_Processed"
 
 bagfiles = []
 
+ouster_correlation = {
+    "internal": 0,
+    "epoch": 0,
+}
+
 # Target topics subject to timestamp correction
 targets = [
+    "/ouster/points",
+    "/ouster/imu",
     "/imu/data",
     "/camera/camera/color/image_raw",
     "/camera/camera/aligned_depth_to_color/image_raw",
@@ -70,7 +77,6 @@ for file in bagfiles:
             writer.create_topic(metadata)
             print(f"Created topic on output bag: {output_topic}")
 
-
     # Read messages from input bag
     while reader.has_next():
         topic, msg, timestamp = reader.read_next()
@@ -123,6 +129,30 @@ for file in bagfiles:
     # List number of messages read per topic
     for topic in messages:
         print(f"Messages read from {topic}: {len(messages[topic])}")
+
+    # Process Ouster points for timestamp correction using the correlation
+    if "/ouster/points" in messages:
+        for message in messages["/ouster/points"]:
+            corrected_ts = int(ouster_correlation["epoch"] + (message["header_ts"] - ouster_correlation["internal"]))
+            print(f"Corrected timestamp for Ouster points message: {corrected_ts} (original: {message['header_ts']})")
+            
+            message["corrected_ts"] = corrected_ts
+
+            message["decoded_msg"].header.stamp.sec = int(corrected_ts // 1e9)
+            message["decoded_msg"].header.stamp.nanosec = int(corrected_ts % 1e9)
+            message["coded_msg"] = serialize_message(message["decoded_msg"])
+
+    # Process Ouster IMU data for timestamp correction
+    if "/ouster/imu" in messages:
+        for message in messages["/ouster/imu"]:
+            corrected_ts = int(ouster_correlation["epoch"] + (message["header_ts"] - ouster_correlation["internal"]))
+
+            message["corrected_ts"] = corrected_ts
+            print(f"Corrected timestamp for Ouster IMU message: {corrected_ts} (original: {message['header_ts']})")
+
+            message["decoded_msg"].header.stamp.sec = int(corrected_ts // 1e9)
+            message["decoded_msg"].header.stamp.nanosec = int(corrected_ts % 1e9)
+            message["coded_msg"] = serialize_message(message["decoded_msg"])
             
     # Process Realsense color images for timestamp correction using exposure time
     if "/camera/camera/color/image_raw" in messages:

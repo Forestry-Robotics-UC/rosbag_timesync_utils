@@ -7,6 +7,7 @@
  * target_link_libraries(your_project pico_stdlib hardware_pwm)
  */
 
+#include <stdio.h>
 #include "pico/stdlib.h"
 #include "hardware/pwm.h"
 #include "hardware/clocks.h"
@@ -14,6 +15,8 @@
 #define PWM_PIN_LIDAR 2      // SLICE 1
 #define PWM_PIN_IMU 6        // SLICE 3
 #define PWM_PIN_REALSENSE 10 // SLICE 5
+
+#define ONBOARD_LED_PIN 25
 
 #define FREQUENCY_1HZ 1
 #define FREQUENCY_30HZ 30
@@ -27,13 +30,15 @@ int main()
     gpio_set_function(PWM_PIN_LIDAR, GPIO_FUNC_PWM);
     gpio_set_function(PWM_PIN_IMU, GPIO_FUNC_PWM);
     gpio_set_function(PWM_PIN_REALSENSE, GPIO_FUNC_PWM);
+    gpio_set_function(ONBOARD_LED_PIN, GPIO_FUNC_PWM);
 
     uint slice_num_lidar = pwm_gpio_to_slice_num(PWM_PIN_LIDAR);
     uint slice_num_imu = pwm_gpio_to_slice_num(PWM_PIN_IMU);
     uint slice_num_realsense = pwm_gpio_to_slice_num(PWM_PIN_REALSENSE);
+    uint slice_num_onboard = pwm_gpio_to_slice_num(ONBOARD_LED_PIN);
 
-    float divider_1hz = 255.0f;
-    uint32_t wrap_1hz = (sys_clock_hz / (FREQUENCY_1HZ * divider_1hz)) - 1;
+    float divider_1hz = 256.0f;
+    uint32_t wrap_1hz = 46874;
     uint16_t level_1hz = ((wrap_1hz + 1) * DUTY_CYCLE_PERCENT) / 100;
 
     pwm_config config_1hz = pwm_get_default_config();
@@ -51,17 +56,18 @@ int main()
     pwm_init(slice_num_lidar, &config_1hz, false);
     pwm_init(slice_num_imu, &config_1hz, false);
     pwm_init(slice_num_realsense, &config_30hz, false);
+    pwm_init(slice_num_onboard, &config_1hz, false);
 
     pwm_set_gpio_level(PWM_PIN_LIDAR, level_1hz);
     pwm_set_gpio_level(PWM_PIN_IMU, level_1hz);
     pwm_set_gpio_level(PWM_PIN_REALSENSE, level_30hz);
+    pwm_set_gpio_level(ONBOARD_LED_PIN, level_1hz);
 
     pwm_set_enabled(slice_num_lidar, true);
     pwm_set_enabled(slice_num_imu, true);
     pwm_set_enabled(slice_num_realsense, true);
+    pwm_set_enabled(slice_num_onboard, true);
 
-    while (true)
-        sleep_ms(10000);
-
-    return 0;
+    while (1)
+        sleep_ms(360000);
 }
